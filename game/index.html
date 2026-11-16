@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TIDELOCK — a harbour-lock tactical FPS</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0d161c; font-family: "Segoe UI", system-ui, sans-serif; color: #eef3f0; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hud { position: fixed; z-index: 5; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  /* Top centre: phase, timer, score. */
+  #topbar { top: 10px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #topbar .row { display: flex; gap: 14px; align-items: baseline; justify-content: center; }
+  #timer { font-size: 30px; font-weight: 700; letter-spacing: 2px; min-width: 92px; }
+  .score { font-size: 26px; font-weight: 700; padding: 0 10px; }
+  #scoreBrk { color: #ffa25e; } #scoreWrd { color: #7adce8; }
+  .tname { font-size: 11px; letter-spacing: 2px; opacity: .85; }
+  #teamBrk { color: #ffa25e; } #teamWrd { color: #7adce8; }
+  #roundLabel, #phaseLabel { font-size: 11px; letter-spacing: 2px; opacity: .8; }
+  .pips { font-size: 10px; letter-spacing: 3px; }
+  #aliveBrk { color: #ffa25e; } #aliveWrd { color: #7adce8; }
+  #chargeState { font-size: 11px; letter-spacing: 2px; color: #ffb0a5; }
+  /* Bottom left: health. Bottom right: gun, ammo, money. */
+  #healthbox { left: 18px; bottom: 16px; width: 230px; }
+  #hpText { font-size: 34px; font-weight: 700; line-height: 1; }
+  #hpTrack { height: 8px; background: rgba(255,255,255,.16); margin-top: 5px; border-radius: 3px; overflow: hidden; }
+  #hpBar { height: 100%; width: 100%; background: #7dd87d; transition: width .15s; }
+  #armText { font-size: 12px; letter-spacing: 1px; margin-top: 4px; color: #bcd8e8; min-height: 15px; }
+  #ammobox { right: 18px; bottom: 16px; text-align: right; }
+  #gunName { font-size: 13px; letter-spacing: 2px; opacity: .85; }
+  #ammoLine { font-size: 34px; font-weight: 700; line-height: 1.05; }
+  #ammoRes { font-size: 18px; opacity: .65; font-weight: 400; }
+  #money { font-size: 19px; color: #9fe8a8; font-weight: 600; }
+  #nadeLine { font-size: 13px; opacity: .85; letter-spacing: 1px; }
+  /* Feeds. */
+  #killfeed { top: 12px; right: 14px; text-align: right; width: 330px; }
+  .feedline { font-size: 13px; margin-bottom: 3px; transition: opacity .8s; background: rgba(8,14,18,.45); padding: 2px 7px; border-radius: 3px; }
+  .feedline .fb { color: #ffa25e; } .feedline .fw { color: #7adce8; }
+  #radio { left: 14px; bottom: 120px; width: 360px; }
+  .radioline { font-size: 12.5px; margin-top: 3px; transition: opacity .8s; background: rgba(8,14,18,.45); padding: 2px 7px; border-radius: 3px; }
+  .radioline .rname { color: #ffd98a; font-weight: 600; }
+  /* Centre: banner, crosshair, hitmarker, channel bar, hint. */
+  #banner { top: 24%; left: 0; right: 0; text-align: center; font-size: 44px; font-weight: 800; letter-spacing: 4px; opacity: 0; transition: opacity .4s; }
+  #subbanner { top: calc(24% + 58px); left: 0; right: 0; text-align: center; font-size: 16px; letter-spacing: 2px; opacity: 0; transition: opacity .4s; }
+  #crosshair { top: 50%; left: 50%; width: 22px; height: 22px; transform: translate(-50%, -50%); }
+  #crosshair::before, #crosshair::after { content: ""; position: absolute; background: rgba(140,255,170,.9); }
+  #crosshair::before { left: 10px; top: 0; width: 2px; height: 22px; }
+  #crosshair::after { left: 0; top: 10px; width: 22px; height: 2px; }
+  #hitmarker { top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(45deg); font-size: 26px; color: #ffd98a; opacity: 0; }
+  #channelWrap { top: 58%; left: 50%; transform: translateX(-50%); width: 300px; text-align: center; opacity: 0; transition: opacity .2s; }
+  #channelLabel { font-size: 13px; letter-spacing: 3px; margin-bottom: 5px; }
+  #channelTrack { height: 7px; background: rgba(255,255,255,.18); border-radius: 3px; overflow: hidden; }
+  #channelBar { height: 100%; width: 0%; background: #ffd98a; }
+  #hint { bottom: 108px; left: 0; right: 0; text-align: center; font-size: 14px; letter-spacing: 1px; color: #ffe9bb; }
+  /* Buy menu. */
+  #buymenu { left: 18px; top: 110px; width: 300px; background: rgba(8,16,20,.82); border: 1px solid rgba(255,210,140,.35); border-radius: 8px; padding: 10px 12px; display: none; }
+  #buymenu h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: 2px; color: #ffd98a; font-weight: 700; }
+  .buyitem { display: flex; gap: 8px; align-items: baseline; padding: 3px 5px; border-radius: 4px; font-size: 13px; opacity: .45; }
+  .buyitem.afford { opacity: 1; }
+  .buyitem.owned { color: #9fe8a8; }
+  .buyitem .bk { background: rgba(255,255,255,.14); border-radius: 3px; padding: 0 5px; font-weight: 700; }
+  .buyitem .bl { flex: 1; }
+  .buyitem .bp { color: #9fe8a8; }
+  /* Scoreboard. */
+  #scoreboard { top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(8,16,20,.9); border: 1px solid rgba(255,255,255,.2); border-radius: 10px; padding: 16px 22px; display: none; min-width: 430px; }
+  #scoreboard h3 { margin: 0 0 10px; font-size: 14px; letter-spacing: 2px; text-align: center; }
+  #scoreboard table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  #scoreboard td, #scoreboard th { padding: 3px 10px; text-align: left; }
+  #scoreboard tr.me { background: rgba(255,217,138,.16); }
+  #scoreboard tr.rb td:first-child { color: #ffa25e; }
+  #scoreboard tr.rw td:first-child { color: #7adce8; }
+  /* Minimap and veils. */
+  #minimap { top: 12px; left: 14px; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; background: #12242c; }
+  #vignette { inset: 0; background: radial-gradient(ellipse at center, transparent 52%, rgba(190,20,10,.55) 100%); opacity: 0; transition: opacity .25s; }
+  #flashveil { inset: 0; background: #fffdf4; opacity: 0; }
+  #scopeveil { inset: 0; opacity: 0; transition: opacity .12s; background: radial-gradient(circle at center, transparent 30%, rgba(0,0,0,.96) 31%); }
+  /* Start screen. */
+  #start { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(10,22,30,.25), rgba(10,16,20,.88)); text-align: center; cursor: pointer; }
+  #start h1 { font-size: 64px; margin: 0; letter-spacing: 10px; color: #ffd98a; text-shadow: 0 3px 18px rgba(0,0,0,.7); }
+  #start h2 { font-weight: 400; letter-spacing: 3px; font-size: 15px; opacity: .9; margin: 6px 0 26px; }
+  #start .cols { display: flex; gap: 34px; font-size: 13.5px; line-height: 1.75; text-align: left; background: rgba(8,14,18,.55); padding: 14px 22px; border-radius: 10px; }
+  #start .play { margin-top: 26px; font-size: 19px; letter-spacing: 3px; color: #9fe8a8; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="topbar" class="hud">
+  <div class="row">
+    <span class="tname" id="teamBrk">BREAKERS</span>
+    <span class="score" id="scoreBrk">0</span>
+    <span id="timer">0:12</span>
+    <span class="score" id="scoreWrd">0</span>
+    <span class="tname" id="teamWrd">WARDENS</span>
+  </div>
+  <div class="row">
+    <span class="pips" id="aliveBrk"></span>
+    <span id="roundLabel">ROUND 1 / 12</span>
+    <span id="phaseLabel">BUY PHASE</span>
+    <span id="chargeState"></span>
+    <span class="pips" id="aliveWrd"></span>
+  </div>
+</div>
+
+<canvas id="minimap" class="hud" width="216" height="144"></canvas>
+<div id="killfeed" class="hud"></div>
+<div id="radio" class="hud"></div>
+
+<div id="healthbox" class="hud">
+  <div id="hpText">100</div>
+  <div id="hpTrack"><div id="hpBar"></div></div>
+  <div id="armText"></div>
+</div>
+
+<div id="ammobox" class="hud">
+  <div id="gunName">P9 SIDEARM</div>
+  <div id="ammoLine"><span id="ammoMag">12</span> <span id="ammoRes">/ 48</span></div>
+  <div id="money">$800</div>
+</div>
+
+<div id="buymenu" class="hud">
+  <h3>HARBOUR SUPPLY — BUY</h3>
+  <div id="buygrid"></div>
+</div>
+
+<div id="banner" class="hud"></div>
+<div id="subbanner" class="hud"></div>
+<div id="crosshair" class="hud"></div>
+<div id="hitmarker" class="hud">✕</div>
+<div id="channelWrap" class="hud">
+  <div id="channelLabel">PLANTING…</div>
+  <div id="channelTrack"><div id="channelBar"></div></div>
+</div>
+<div id="hint" class="hud"></div>
+
+<div id="scoreboard" class="hud"></div>
+<div id="vignette" class="hud"></div>
+<div id="flashveil" class="hud"></div>
+<div id="scopeveil" class="hud"></div>
+
+<div id="start">
+  <h1>TIDELOCK</h1>
+  <h2>FIVE AGAINST FIVE AT THE HARBOUR LOCK · BREAKERS PLANT, WARDENS HOLD</h2>
+  <div class="cols">
+    <div>
+      WASD — move · SHIFT — walk quiet<br>
+      CTRL — crouch · SPACE — jump<br>
+      MOUSE — look · CLICK — fire<br>
+      RIGHT CLICK — aim / scope (Harpoon)
+    </div>
+    <div>
+      R — reload · 1/2 — weapons · 3/4/5 — grenades<br>
+      E — plant / defuse (hold)<br>
+      BUY PHASE — number keys buy · TAB — scores<br>
+      First to 7 rounds, sides swap at the half
+    </div>
+  </div>
+  <div class="play">CLICK TO TAKE THE HARBOUR</div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
